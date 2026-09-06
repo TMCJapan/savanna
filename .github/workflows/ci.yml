@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  # clippy / build --release / nextest --release を 5 プラットフォームで実施する。
+  # 3 つとも release プロファイルなので、1 ジョブにまとめて checkout とキャッシュを共有する。
+  test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: win-x64
+            os: windows-latest
+            bin: savanna.exe
+          - name: win-arm
+            os: windows-11-arm
+            bin: savanna.exe
+          - name: linux-x64
+            os: ubuntu-latest
+            bin: savanna
+          - name: linux-arm
+            os: ubuntu-24.04-arm
+            bin: savanna
+          - name: macos
+            os: macos-latest
+            bin: savanna
+    steps:
+      - uses: actions/checkout@v5
+
+      # ARM ランナーイメージには rustup が入っていない場合があるため、無ければ導入する。
+      - name: rustup を用意
+        shell: bash
+        run: |
+          if command -v rustup >/dev/null 2>&1; then
+            echo "rustup は導入済み"
+            exit 0
+          fi
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --profile minimal --default-toolchain none --no-modify-path
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cygpath -w "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          else
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          fi
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.name }}
+
+      - uses: taiki-e/install-action@nextest
+
+      - name: cargo clippy --release
+        run: cargo clippy --all-targets --release --locked -- -D warnings
+
+      - name: cargo build --release
+        run: cargo build --release --locked
+
+      # テストが落ちた場合でも調査に使えるよう、nextest より前にアップロードする。
+      - name: release ビルド成果物をアップロード
+        uses: actions/upload-artifact@v7
+        with:
+          name: savanna-${{ matrix.name }}
+          path: target/release/${{ matrix.bin }}
+          if-no-files-found: error
+
+      - name: cargo nextest run --release
+        run: cargo nextest run --release --locked
+
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
+  taplo:
+    name: taplo fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: taplo-cli
+      - run: taplo fmt --check --diff
+
+  typos:
+    name: typos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: crate-ci/typos@v1
+
+  machete:
+    name: cargo-machete
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-machete
+      - run: cargo machete
