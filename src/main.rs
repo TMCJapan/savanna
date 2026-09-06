@@ -21,7 +21,9 @@ fn url_filter<'a>(link: linkify::Link<'a>) -> Option<u64> {
     let url = Url::parse(link.as_str()).unwrap();
     if matches!(
         url.host(),
-        Some(url::Host::Domain("discord.com" | "discordapp.com"))
+        Some(url::Host::Domain(
+            "discord.com" | "ptb.discord.com" | "canary.discord.com" | "discordapp.com"
+        ))
     ) {
         let mut segments = url.path_segments().unwrap();
         if Some("channels") == segments.next()
@@ -321,11 +323,6 @@ mod tests {
     #[test]
     fn discord以外のurlは無視する() {
         assert!(extract("https://example.com/channels/123/456/789").is_empty());
-    }
-
-    #[test]
-    fn canaryなどのサブドメインは対象外() {
-        assert!(extract("https://canary.discord.com/channels/123/456/789").is_empty());
     }
 
     #[test]
