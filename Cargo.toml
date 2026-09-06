@@ -1,0 +1,11 @@
+[package]
+name = "savanna"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serenity = "0.12"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+linkify = "0.11"
+url = "2"
+dotenvy = "0.15"
