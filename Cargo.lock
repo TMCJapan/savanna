@@ -1230,6 +1230,8 @@ version = "0.1.0"
 dependencies = [
  "dotenvy",
  "linkify",
+ "reqwest",
+ "serde",
  "serenity",
  "tokio",
  "url",
