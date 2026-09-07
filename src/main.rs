@@ -105,15 +105,15 @@ async fn fetch_invite(client: &reqwest::Client, guild_id: GuildId) -> Invite {
 
 /// 取得したメタデータを embed に整形する
 fn guild_embed(guild_id: GuildId, preview: &GuildPreview, invite: &Invite) -> CreateEmbed {
-    let mut auther = CreateEmbedAuthor::new(&preview.name);
+    let mut author = CreateEmbedAuthor::new(&preview.name);
     if let Invite::Found(url) = invite {
-        auther = auther.url(url);
+        author = author.url(url);
     }
     if let Some(icon) = icon_url(guild_id, preview.icon.as_ref()) {
-        auther = auther.icon_url(icon);
+        author = author.icon_url(icon);
     }
 
-    CreateEmbed::new().colour(Colour::BLURPLE).author(auther)
+    CreateEmbed::new().colour(Colour::BLURPLE).author(author)
 }
 
 /// 取得できなかった場合の embed
