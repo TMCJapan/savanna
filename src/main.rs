@@ -145,9 +145,14 @@ impl Handler {
     }
 
     /// メッセージ本文から guild id を重複なく (出現順で) 抽出する
-    fn extract_guild_ids(&self, content: &str) -> Vec<u64> {
+    fn extract_guild_ids(&self, content: &str, current_guild_id: Option<GuildId>) -> Vec<u64> {
+        let current_guild_id = current_guild_id.map(GuildId::get);
         let mut guild_ids = Vec::new();
         for guild_id in self.finder.links(content).filter_map(url_filter) {
+            // メッセージを受信したチャンネルと同じサーバーの URL はスキップする。
+            if Some(guild_id) == current_guild_id {
+                continue;
+            }
             if !guild_ids.contains(&guild_id) {
                 guild_ids.push(guild_id);
             }
@@ -182,7 +187,7 @@ impl EventHandler for Handler {
             return;
         }
 
-        let guild_ids = self.extract_guild_ids(&msg.content);
+        let guild_ids = self.extract_guild_ids(&msg.content, msg.guild_id);
         if guild_ids.is_empty() {
             return;
         }
@@ -243,7 +248,11 @@ mod tests {
     use serenity::all::{GuildId, ImageHash};
 
     fn extract(content: &str) -> Vec<u64> {
-        Handler::new().extract_guild_ids(content)
+        Handler::new().extract_guild_ids(content, None)
+    }
+
+    fn extract_in_guild(content: &str, current_guild_id: u64) -> Vec<u64> {
+        Handler::new().extract_guild_ids(content, Some(GuildId::new(current_guild_id)))
     }
 
     #[test]
@@ -299,6 +308,18 @@ mod tests {
     #[test]
     fn urlがなければ空になる() {
         assert!(extract("ただのテキスト").is_empty());
+    }
+
+    #[test]
+    fn 受信したチャンネルと同じサーバーのurlはスキップする() {
+        let content = "https://discord.com/channels/111/1/1 と \
+             https://discord.com/channels/222/2/2";
+        assert_eq!(extract_in_guild(content, 111), vec![222]);
+    }
+
+    #[test]
+    fn 受信したチャンネルと同じサーバーのurlだけなら空になる() {
+        assert!(extract_in_guild("https://discord.com/channels/111/1/1", 111).is_empty());
     }
 
     #[test]
