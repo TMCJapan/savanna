@@ -21,17 +21,18 @@ fn url_filter<'a>(link: linkify::Link<'a>) -> Option<u64> {
     let url = Url::parse(link.as_str()).unwrap();
     if matches!(
         url.host(),
-        Some(url::Host::Domain("discord.com" | "discordapp.com"))
-    ) {
-        let mut segments = url.path_segments().unwrap();
-        if Some("channels") == segments.next()
-            && let Some(raw_guild_id) = segments.next()
-            && let Ok(guild_id) = raw_guild_id.parse::<u64>()
-        {
-            return Some(guild_id);
-        }
+        Some(url::Host::Domain(
+            "discord.com" | "ptb.discord.com" | "canary.discord.com" | "discordapp.com"
+        ))
+    ) && let Some(mut segments) = url.path_segments()
+        && Some("channels") == segments.next()
+        && let Some(raw_guild_id) = segments.next()
+        && let Ok(guild_id) = raw_guild_id.parse::<u64>()
+    {
+        Some(guild_id)
+    } else {
+        None
     }
-    None
 }
 
 /// ギルドアイコンの CDN URL を組み立てる
@@ -321,11 +322,6 @@ mod tests {
     #[test]
     fn discord以外のurlは無視する() {
         assert!(extract("https://example.com/channels/123/456/789").is_empty());
-    }
-
-    #[test]
-    fn canaryなどのサブドメインは対象外() {
-        assert!(extract("https://canary.discord.com/channels/123/456/789").is_empty());
     }
 
     #[test]
