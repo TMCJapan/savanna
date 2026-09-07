@@ -4,9 +4,9 @@ use std::time::Duration;
 use linkify::{LinkFinder, LinkKind};
 use serde::Deserialize;
 use serenity::all::{
-    Colour, Context, CreateAllowedMentions, CreateEmbed, CreateEmbedFooter, CreateMessage,
-    EventHandler, GatewayIntents, GuildId, GuildPreview, Http, HttpError, ImageHash, Message,
-    Ready, StatusCode,
+    Colour, Context, CreateAllowedMentions, CreateEmbed, CreateEmbedAuthor, CreateEmbedFooter,
+    CreateMessage, EventHandler, GatewayIntents, GuildId, GuildPreview, Http, HttpError, ImageHash,
+    Message, Ready, StatusCode,
 };
 use serenity::futures::future::join_all;
 use serenity::{Client, async_trait};
@@ -42,26 +42,6 @@ fn icon_url(guild_id: GuildId, icon: Option<&ImageHash>) -> Option<String> {
     })
 }
 
-/// Server Discovery の掲載ページ URL。招待リンクではない点に注意
-fn discovery_url(guild_id: GuildId) -> String {
-    format!("https://discord.com/servers/{guild_id}")
-}
-
-/// Server Discovery に登録されているか。preview は「Bot が参加中」でも取得できるため、
-/// 掲載の有無は `features` に `DISCOVERABLE` があるかで判定する。
-fn is_discoverable(features: &[String]) -> bool {
-    features.iter().any(|feature| feature == "DISCOVERABLE")
-}
-
-/// Server Discovery 欄の表示文言
-fn discovery_text(guild_id: GuildId, discoverable: bool) -> String {
-    if discoverable {
-        format!("✅ 登録済み\n{}", discovery_url(guild_id))
-    } else {
-        "❌ 未登録".to_owned()
-    }
-}
-
 /// `GET /guilds/{id}/widget.json` の結果
 enum Invite {
     Found(String),
@@ -69,15 +49,6 @@ enum Invite {
     Unavailable,
     /// 通信エラーなど、判定不能な失敗
     Failed,
-}
-
-/// 招待リンク欄の表示文言
-fn invite_text(invite: &Invite) -> String {
-    match invite {
-        Invite::Found(url) => url.clone(),
-        Invite::Unavailable => "取得できません (サーバーウィジェットが無効)".to_owned(),
-        Invite::Failed => "取得に失敗しました".to_owned(),
-    }
 }
 
 /// `GET /guilds/{id}/preview` の結果
@@ -134,38 +105,15 @@ async fn fetch_invite(client: &reqwest::Client, guild_id: GuildId) -> Invite {
 
 /// 取得したメタデータを embed に整形する
 fn guild_embed(guild_id: GuildId, preview: &GuildPreview, invite: &Invite) -> CreateEmbed {
-    let discoverable = is_discoverable(&preview.features);
-
-    let mut embed = CreateEmbed::new()
-        .title(&preview.name)
-        .colour(Colour::BLURPLE)
-        .field(
-            "Server Discovery",
-            discovery_text(guild_id, discoverable),
-            false,
-        )
-        .field("招待リンク", invite_text(invite), false)
-        .field(
-            "メンバー数",
-            format!(
-                "約 {} 人 (オンライン 約 {} 人)",
-                preview.approximate_member_count, preview.approximate_presence_count
-            ),
-            false,
-        )
-        .footer(CreateEmbedFooter::new(format!("Guild ID: {guild_id}")));
-
-    // Discovery ページは招待リンクではないので、タイトルのリンクには使わない
+    let mut auther = CreateEmbedAuthor::new(&preview.name);
     if let Invite::Found(url) = invite {
-        embed = embed.url(url);
+        auther = auther.url(url);
     }
     if let Some(icon) = icon_url(guild_id, preview.icon.as_ref()) {
-        embed = embed.thumbnail(icon);
+        auther = auther.icon_url(icon);
     }
-    if let Some(description) = &preview.description {
-        embed = embed.description(description);
-    }
-    embed
+
+    CreateEmbed::new().colour(Colour::BLURPLE).author(auther)
 }
 
 /// 取得できなかった場合の embed
@@ -290,7 +238,7 @@ async fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{Handler, Invite, discovery_text, icon_url, invite_text, is_discoverable};
+    use super::{Handler, icon_url};
     use serenity::all::{GuildId, ImageHash};
 
     fn extract(content: &str) -> Vec<u64> {
@@ -378,38 +326,5 @@ mod tests {
             icon_url(GuildId::new(123), Some(&hash)).unwrap(),
             "https://cdn.discordapp.com/icons/123/a_0123456789abcdef0123456789abcdef.gif?size=256"
         );
-    }
-
-    #[test]
-    fn discoverable_featureで掲載を判定する() {
-        assert!(is_discoverable(&[
-            "COMMUNITY".to_owned(),
-            "DISCOVERABLE".to_owned()
-        ]));
-        // PREVIEW_ENABLED だけでは Discovery 掲載とは限らない
-        assert!(!is_discoverable(&["PREVIEW_ENABLED".to_owned()]));
-    }
-
-    #[test]
-    fn 掲載済みならdiscoveryページを案内する() {
-        assert_eq!(
-            discovery_text(GuildId::new(123), true),
-            "✅ 登録済み\nhttps://discord.com/servers/123"
-        );
-        assert_eq!(discovery_text(GuildId::new(123), false), "❌ 未登録");
-    }
-
-    #[test]
-    fn 招待リンクが取れなければ理由を表示する() {
-        assert_eq!(
-            invite_text(&Invite::Found("https://discord.gg/abc".to_owned())),
-            "https://discord.gg/abc"
-        );
-        assert_eq!(
-            invite_text(&Invite::Unavailable),
-            "取得できません (サーバーウィジェットが無効)"
-        );
-        // ウィジェット無効と通信失敗は区別する
-        assert_eq!(invite_text(&Invite::Failed), "取得に失敗しました");
     }
 }
