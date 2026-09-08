@@ -1,0 +1,32 @@
+version: 2
+
+updates:
+  # Rust の依存関係 (Cargo.toml / Cargo.lock)
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      # パッチ / マイナー更新はまとめて 1 つの PR にする。
+      # メジャー更新は破壊的変更を確認したいので個別の PR に残す。
+      cargo-minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  # GitHub Actions のワークフロー (.github/workflows)
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore(actions)"
+    groups:
+      actions-minor-patch:
+        update-types:
+          - minor
+          - patch
